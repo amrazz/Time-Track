@@ -1,0 +1,79 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# dotenv (environment variables)
+*.env
+
+# Python egg info
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Database files (optional)
+*.sqlite3
+
+# Logs
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+.nox/
+coverage.xml
+.cache
+.pytest_cache/
+
+# Test results
+junit-*.xml
+
+# Static & media files (if you use them)
+staticfiles/
+media/
+uploads/
+
+# MyPy and other type checker
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Pydantic models cache (if used)
+__pydantic__/
+
+
+# FastAPI-specific (if using Uvicorn logs or hot reload caches)
+*.reload
+
+# Optional: poetry
+poetry.lock
