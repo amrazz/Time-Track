@@ -1,6 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from utils.counter import get_next_sequence
 from database.schemas.auth import UserRegister
 from database.schemas.token import Token
 from database.db_config import user_db
@@ -20,11 +21,19 @@ async def create_user(request: UserRegister):
             )
 
         hashed_password = hash_password(request.password)
-        user_object = dict(request)
-        user_object["password"] = hashed_password
-        new_user = user_db.insert_one(user_object)
+        user_id = get_next_sequence("user_id")
+        user_object = {
+            "id": str(user_id),
+            "full_name": request.full_name,
+            "email": request.email,
+            "password": hashed_password,
+        }
+        user_db.insert_one(user_object)
 
-        return {"detail": "User registered successfully", "status" : status.HTTP_201_CREATED}
+        return {
+            "detail": "User registered successfully",
+            "status": status.HTTP_201_CREATED,
+        }
 
     except Exception as e:
         raise HTTPException(
@@ -34,7 +43,7 @@ async def create_user(request: UserRegister):
 
 @router.post("/login")
 async def login_user(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
     user = user_db.find_one({"email": form_data.username})
     if not user:
@@ -46,6 +55,5 @@ async def login_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Password does not match."
         )
-
     access_token = create_access_token(data={"sub": user["email"]})
     return {"access_token": access_token, "token_type": "bearer"}

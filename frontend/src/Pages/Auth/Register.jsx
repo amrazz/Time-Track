@@ -46,7 +46,7 @@ const Register = () => {
         password: values.password,
       };
       const response = await api.post("/auth/register", payload);
-      if (response.status === 201) {
+      if (response.status === 200) {
         toast.success("User registered successfully.");
         resetForm();
         navigate("/login");

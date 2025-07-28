@@ -8,6 +8,7 @@ from loguru import logger
 
 router = APIRouter()
 
+
 @router.get("/me")
-def get_loggedin_user(current_user : Annotated[UserModel, Depends(get_current_user)]):
+def get_loggedin_user(current_user: Annotated[UserModel, Depends(get_current_user)]):
     return current_user

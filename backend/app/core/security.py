@@ -45,10 +45,10 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 def get_user(email: EmailStr):
     user = user_db.find_one({"email": email})
     if user:
-        user["_id"] = str(user["_id"])
         return {
             "email": user["email"],
             "full_name": user["full_name"],
+            "id": str(user["id"]),
         }
     return None
 
