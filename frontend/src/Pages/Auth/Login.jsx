@@ -44,15 +44,15 @@ const Login = () => {
         },
       });
       if (response.status === 200) {
-        const accessToken = response.data.access_token
+        const accessToken = response.data.access_token;
         saveToken(accessToken);
         const userResponse = await api.get("/users/me", {
-          headers : {
-            Authorization : `Bearer ${accessToken}`
-          }
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         });
         if (userResponse.status === 200) {
-          console.log(`This is the user response : ${userResponse.data}`)
+          console.log(`This is the user response : ${userResponse.data}`);
           saveUser(userResponse.data);
           toast.success("User Logged in successfully.");
           resetForm();

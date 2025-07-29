@@ -32,7 +32,7 @@ async def create_user(request: UserRegister):
 
         return {
             "detail": "User registered successfully",
-            "status": status.HTTP_201_CREATED,
+            "status_code": status.HTTP_201_CREATED,
         }
 
     except Exception as e:

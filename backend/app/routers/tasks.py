@@ -6,7 +6,7 @@ from database.db_config import task_db
 from utils.counter import get_next_sequence
 from deps import get_current_user
 from database.schemas.auth import UserModel
-from database.schemas.tasks import TaskModel
+from database.schemas.tasks import TaskModel, UpdateTask
 
 router = APIRouter()
 
@@ -25,11 +25,11 @@ def create_task(
         task_dict = task_data.dict()
 
         task_dict["user_id"] = user_id
-        task_dict["task_id"] = str(get_next_sequence("task_id"))
+        task_dict["id"] = str(get_next_sequence("task_id"))
 
         task_db.insert_one(task_dict)
 
-        return {"detail": "Task created successfully"}
+        return {"detail": "Task created successfully", "status_code": status.HTTP_201_CREATED}
 
     except Exception as e:
         raise HTTPException(
@@ -72,11 +72,13 @@ async def get_task(
 async def update_task(
     current_user: Annotated[UserModel, Depends(get_current_user)],
     task_id: int,
-    task_data: TaskModel,
+    task_data: UpdateTask,
 ):
     try:
+        logger.info(f"[UPDATE] Request to update task {task_id} & type of task_id {type(task_id)} by user {current_user['id']} & type of user_id {type(current_user["id"])}")
+
         existing_task = task_db.find_one(
-            {"task_id": str(task_id), "user_id": str(current_user["id"])}
+            {"id": str(task_id), "user_id": str(current_user["id"])}
         )
 
         if not existing_task:
@@ -86,6 +88,7 @@ async def update_task(
             )
 
         update_data = task_data.dict(exclude_unset=True)
+        logger.debug(f"[UPDATE] Incoming update data: {update_data}")
 
         if not update_data:
             raise HTTPException(
@@ -96,7 +99,7 @@ async def update_task(
         update_data["updated_at"] = datetime.utcnow()
 
         res = task_db.update_one(
-            {"task_id": str(task_id), "user_id": str(current_user["id"])},
+            {"id": str(task_id), "user_id": str(current_user["id"])},
             {"$set": update_data},
         )
 
@@ -105,10 +108,11 @@ async def update_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Task update failed or no changes were made.",
             )
-
-        return {"message": "Task updated successfully."}
+        logger.info(f"[UPDATE] Task {task_id} updated successfully by user {current_user['id']}")
+        return {"message": "Task updated successfully.", "status_code": status.HTTP_200_OK,}
 
     except Exception as e:
+        logger.error(f"[UPDATE] Exception while updating task {task_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error while updating task: {str(e)}",
@@ -121,19 +125,20 @@ async def delete_task(
     task_id: int,
 ):
     try:
+
         res = task_db.delete_one(
             {
-                "task_id": str(task_id),
+                "id": str(task_id),
                 "user_id": str(current_user["id"]),
             }
         )
-
+        logger.info(f"This is the task and user ID : {task_id}, {current_user["id"]}")
+        logger.info(f"This is the res of data : ${res}")
         if res.deleted_count == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task not found or already deleted.",
             )
-
         return {
             "message": f"Task {task_id} deleted successfully.",
             "status_code": status.HTTP_200_OK,
