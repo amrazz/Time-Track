@@ -25,7 +25,7 @@ const AuthSchema = Yup.object().shape({
 const Login = () => {
   const api = useApi();
   const navigate = useNavigate();
-  const { saveToken, saveUser } = useAuth();
+  const { saveAuthData } = useAuth();
 
   const initialValues = {
     email: "",
@@ -44,16 +44,18 @@ const Login = () => {
         },
       });
       if (response.status === 200) {
-        const accessToken = response.data.access_token;
-        saveToken(accessToken);
+        const { access_token, refresh_token } = response.data;
         const userResponse = await api.get("/users/me", {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${access_token}`,
           },
         });
         if (userResponse.status === 200) {
-          console.log(`This is the user response : ${userResponse.data}`);
-          saveUser(userResponse.data);
+          saveAuthData({
+            accessToken : access_token,
+            refreshToken : refresh_token,
+            user: userResponse.data,
+          });
           toast.success("User Logged in successfully.");
           resetForm();
           navigate("/");

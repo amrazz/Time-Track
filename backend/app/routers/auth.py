@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from utils.counter import get_next_sequence
+from deps import oauth2_scheme
 from database.schemas.auth import UserRegister
 from database.schemas.token import Token
 from database.db_config import user_db
@@ -9,6 +10,8 @@ from core.security import *
 from loguru import logger
 
 router = APIRouter()
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
 
 
 @router.post("/register")
@@ -55,5 +58,39 @@ async def login_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Password does not match."
         )
-    access_token = create_access_token(data={"sub": user["email"]})
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(
+        data={"sub": user["email"]}, expires_delta=timedelta(minutes=60)
+    )
+    refresh_token = create_refresh_token(
+        data={"sub": user["email"]}, expires_delta=timedelta(days=1)
+    )
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/refresh")
+async def refresh_token(refresh_token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type"
+            )
+
+        email = payload.get("sub")
+        user = user_db.find_one({"email": email})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
+            )
+
+        new_access_token = create_access_token(data={"sub": email})
+        return {"access_token": new_access_token, "token_type": "bearer"}
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )

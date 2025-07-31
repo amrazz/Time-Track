@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
 import useApi from "../api/useApi";
-import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
 import { AnimatePresence, motion } from "motion/react";
 import Nav from "../Components/Nav";
 import { Filter, Search, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { X, Edit3, Circle, CheckCircle2, Save, Clock } from "lucide-react";
+import CalendarCom from "../Components/CalendarCom";
+import DeleteConfirmationModal from "../Components/DeleteConfirmationModal";
+import EditTaskModal from "../Components/EditTaskModal";
+import CreateTaskModal from "../Components/CreateTaskModal";
+import TaskList from "../Components/TaskList";
 
 const Dashboard = () => {
   const [tasks, setTasks] = useState([]);
@@ -22,6 +24,13 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const storedUser = localStorage.getItem("currentUser");
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
+  const [errors, setErrors] = useState({
+    title: "",
+    description: "",
+    due_date: "",
+    priority: "",
+    status: "",
+  });
 
   const [newTask, setNewTask] = useState({
     title: "",
@@ -44,7 +53,6 @@ const Dashboard = () => {
       setTasks(tasksData);
       setFilteredTasks(tasksData);
     } catch (error) {
-      toast.error(`Error fetching tasks: ${error.message || "Unknown error"}`);
       console.error("Error fetching tasks:", error);
       setTasks([]);
       setFilteredTasks([]);
@@ -53,15 +61,71 @@ const Dashboard = () => {
     }
   };
 
-  const createTask = async () => {
-    console.log(
-      "Current user ID:",
-      currentUser.id,
-      "Full object:",
-      currentUser
-    );
+  const validateAndCreateTask = async () => {
+    const newErrors = {
+      title: "",
+      description: "",
+      due_date: "",
+      priority: "",
+      status: "",
+    };
+
+    let isValid = true;
+
+    // Validate title
+    if (!newTask.title.trim()) {
+      newErrors.title = "Task title is required";
+      isValid = false;
+    } else if (newTask.title.length > 100) {
+      newErrors.title = "Title must be less than 100 characters";
+      isValid = false;
+    }
+
+    // Validate description
+    if (newTask.description.length > 500) {
+      newErrors.description = "Description must be less than 500 characters";
+      isValid = false;
+    }
+
+    if (selectedDate) {
+      newTask.due_date = selectedDate;
+    }
+
+    // Validate due date
+    if (!newTask.due_date) {
+      newErrors.due_date = "Due date is required";
+      isValid = false;
+    } else {
+      const selectedDate = new Date(newTask.due_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (selectedDate < today) {
+        newErrors.due_date = "Due date cannot be in the past";
+        isValid = false;
+      }
+    }
+
+    // Validate priority
+    if (!newTask.priority) {
+      newErrors.priority = "Priority is required";
+      isValid = false;
+    }
+
+    // Validate status
+    if (!newTask.status) {
+      newErrors.status = "Status is required";
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+
+    if (!isValid) {
+      return;
+    }
+
+    // Proceed with task creation if validation passes
     try {
-      if (!newTask.title.trim()) return;
       const taskData = {
         ...newTask,
         user_id: currentUser.id,
@@ -69,11 +133,19 @@ const Dashboard = () => {
           ? new Date(newTask.due_date).toISOString()
           : null,
       };
+
       const response = await api.post("/tasks/create-task", taskData);
       if (response.data.status_code === 201) {
         await fetchTasks();
         setShowTaskModal(false);
         resetTaskForm();
+        setErrors({
+          title: "",
+          description: "",
+          due_date: "",
+          priority: "",
+          status: "",
+        });
       }
     } catch (error) {
       console.error("Error creating task:", error);
@@ -93,16 +165,70 @@ const Dashboard = () => {
     }
   };
 
-  const updateTask = async (taskId, updates) => {
+  const validateAndUpdateTask = async (taskId, updates) => {
+    console.log("brooo");
+    const newErrors = {
+      title: "",
+      description: "",
+      due_date: "",
+      priority: "",
+      status: "",
+    };
+
+    let isValid = true;
+
+    // Validate title
+    if (updates.title && !updates.title.trim()) {
+      newErrors.title = "Task title is required";
+      isValid = false;
+    } else if (updates.title && updates?.title.length > 100) {
+      newErrors.title = "Title must be less than 100 characters";
+      isValid = false;
+    }
+
+    // Validate description
+    if (updates.description && updates.description.length > 500) {
+      newErrors.description = "Description must be less than 500 characters";
+      isValid = false;
+    }
+
+    // Validate due date
+    if (updates.due_date && !updates.due_date) {
+      newErrors.due_date = "Due date is required";
+      isValid = false;
+    } else {
+      const selectedDate = new Date(updates.due_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (selectedDate < today) {
+        newErrors.due_date = "Due date cannot be in the past";
+        isValid = false;
+      }
+    }
+
+    setErrors(newErrors);
+
+    if (!isValid) {
+      return;
+    }
+
     try {
       const response = await api.patch(`tasks/update-task/${taskId}`, updates);
       if (response.data.status_code === 200) {
         await fetchTasks();
         setEditingTask(null);
+        setErrors({
+          title: "",
+          description: "",
+          due_date: "",
+          priority: "",
+          status: "",
+        });
+        toast.success("Task updated successfully");
       }
     } catch (error) {
       toast.error(`Error updating task: ${error.message}`);
-
       console.error("Error updating task:", error);
     }
   };
@@ -137,33 +263,43 @@ const Dashboard = () => {
       priority: "medium",
     });
   };
+
   const getCalendarEvents = () => {
     return tasks
-      .map((task) => ({
-        id: task.id || task._id,
-        title: task.title,
-        date: task.due_date
-          ? new Date(task.due_date).toISOString().split("T")[0]
-          : null,
-        backgroundColor:
-          task.priority === "high"
-            ? "#ef4444"
-            : task.priority === "medium"
-            ? "#f59e0b"
-            : "#10b981",
-        borderColor:
-          task.priority === "high"
-            ? "#dc2626"
-            : task.priority === "medium"
-            ? "#d97706"
-            : "#059669",
-        extendedProps: {
-          status: task.status,
-          priority: task.priority,
-          description: task.description,
-        },
-      }))
-      .filter((event) => event.date);
+      .map((task) => {
+        const dueDate = task.due_date ? new Date(task.due_date) : null;
+
+        if (!dueDate || isNaN(dueDate.getTime())) {
+          return null;
+        }
+
+        return {
+          id: task.id || task._id,
+          title: task.title,
+          start: dueDate.toISOString(),
+          allDay: true,
+          extendedProps: {
+            description: task.description,
+            priority: task.priority,
+            status: task.status,
+          },
+          backgroundColor:
+            task.priority === "high"
+              ? "#ef4444"
+              : task.priority === "medium"
+              ? "#f59e0b"
+              : "#10b981",
+          borderColor:
+            task.priority === "high"
+              ? "#dc2626"
+              : task.priority === "medium"
+              ? "#d97706"
+              : "#059669",
+          textColor: "#ffffff",
+          className: `priority-${task.priority} status-${task.status}`,
+        };
+      })
+      .filter((event) => event !== null);
   };
 
   const getStatusIcon = (status) => {
@@ -193,29 +329,25 @@ const Dashboard = () => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-200"
+      className="min-h-screen bg-gradient-to-tr from-gray-300 to-gray-800"
     >
       <Nav setShowTaskModal={setShowTaskModal} />
       <div className="p-6">
         {/* Stats Cards */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 ">
           {/* Tasks Section */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100"
+            className=" rounded-2xl shadow-sm border border-gray-100 bg-gray-800"
           >
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
-                >
-                  <Filter className="w-5 h-5" />
-                </motion.button>
+            <div className="p-6 border-b border-gray-100 bg-gray-800 rounded-2xl">
+              <div className="flex items-center justify-center mb-4">
+                <h2 className="text-2xl text-center font-semibold text-white">
+                  TASKS
+                </h2>
               </div>
 
               {/* Search and Filters */}
@@ -227,7 +359,7 @@ const Dashboard = () => {
                     placeholder="Search tasks..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder:text-gray-400 bg-transparent"
                   />
                 </div>
 
@@ -235,507 +367,113 @@ const Dashboard = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="flex-1 py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
                   >
-                    <option value="all">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
+                    <option value="all" className="text-black">
+                      All Status
+                    </option>
+                    <option value="pending" className="text-black">
+                      Pending
+                    </option>
+                    <option value="in-progress" className="text-black">
+                      In Progress
+                    </option>
+                    <option value="completed" className="text-black">
+                      Completed
+                    </option>
                   </select>
 
                   <select
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="flex-1 py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
                   >
-                    <option value="all">All Priority</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="all" className="text-black">
+                      All Priority
+                    </option>
+                    <option value="high" className="text-black">
+                      High
+                    </option>
+                    <option value="medium" className="text-black">
+                      Medium
+                    </option>
+                    <option value="low" className="text-black">
+                      Low
+                    </option>
                   </select>
                 </div>
               </div>
             </div>
 
-            <div className="p-6">
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                <AnimatePresence>
-                  {loading ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex justify-center items-center py-8"
-                    >
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    </motion.div>
-                  ) : filteredTasks.length === 0 ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-center py-8 text-gray-500"
-                    >
-                      No tasks found
-                    </motion.div>
-                  ) : (
-                    filteredTasks.map((task, index) => (
-                      <motion.div
-                        key={task.id || task._id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: -100 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition-all"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3 flex-1">
-                            <motion.button
-                              className="overflow-hidden"
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() =>
-                                updateTask(task.id, {
-                                  status:
-                                    task.status === "completed"
-                                      ? "pending"
-                                      : "completed",
-                                })
-                              }
-                            >
-                              {getStatusIcon(task.status)}
-                            </motion.button>
-
-                            <div className="flex-1">
-                              <h3
-                                className={`font-medium ${
-                                  task.status === "completed"
-                                    ? "line-through text-gray-500"
-                                    : "text-gray-900"
-                                }`}
-                              >
-                                {task.title}
-                              </h3>
-                              {task.description && (
-                                <p className="text-sm text-gray-600 mt-1">
-                                  {task.description}
-                                </p>
-                              )}
-
-                              <div className="flex items-center space-x-2 mt-2">
-                                <span
-                                  className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(
-                                    task.priority
-                                  )}`}
-                                >
-                                  {task.priority}
-                                </span>
-                                {task.due_date && (
-                                  <span className="text-xs text-gray-500">
-                                    Due:{" "}
-                                    {new Date(
-                                      task.due_date
-                                    ).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-1 ml-2">
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() => setEditingTask(task)}
-                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </motion.button>
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() => setTaskToDelete(task)}
-                              className="p-1 text-gray-400 hover:text-red-600 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </motion.button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))
-                  )}
-                </AnimatePresence>
+            <div className="p-6 bg-gray-800">
+              <div className="space-y-3 max-h-[30rem] overflow-y-auto ">
+                <TaskList
+                  filteredTasks={filteredTasks}
+                  loading={loading}
+                  setEditingTask={setEditingTask}
+                  setTaskToDelete={setTaskToDelete}
+                  validateAndUpdateTask={validateAndUpdateTask}
+                  getStatusIcon={getStatusIcon}
+                  getPriorityColor={getPriorityColor}
+                />
               </div>
             </div>
           </motion.div>
 
           {/* Calendar Section */}
-          <motion.div
-            initial={{ x: 20, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100"
-          >
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-xl font-semibold text-gray-900">Calendar</h2>
-              <p className="text-sm text-gray-600">View tasks by due date</p>
-            </div>
-
-            <div className="p-6">
-              <FullCalendar
-                plugins={[dayGridPlugin, interactionPlugin]}
-                initialView="dayGridMonth"
-                events={getCalendarEvents()}
-                headerToolbar={{
-                  left: "prev,next today",
-                  center: "title",
-                  right: "dayGridMonth",
-                }}
-                height="auto"
-                validRange={{
-                  start: new Date().toISOString().split("T")[0],
-                }}
-                dayMaxEvents={3}
-                eventDisplay="block"
-                dateClick={(info) => {
-                  setSelectedDate(info.dateStr);
-                  setShowTaskModal(true);
-                }}
-                eventClick={(info) => {
-                  const task = tasks.find(
-                    (t) => (t.id || t._id) === info.event.id
-                  );
-                  if (task) setEditingTask(task);
-                }}
-                dayCellClassNames="hover:bg-gray-50 transition-colors cursor-pointer"
-                eventClassNames="rounded-md shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-              />
-            </div>
-          </motion.div>
+          <CalendarCom
+            getCalendarEvents={getCalendarEvents}
+            setSelectedDate={setSelectedDate}
+            setShowTaskModal={setShowTaskModal}
+            setEditingTask={setEditingTask}
+            tasks={tasks}
+          />
         </div>
       </div>
 
       {/* Task Modal */}
       <AnimatePresence>
         {showTaskModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => {
-              setShowTaskModal(false);
-              resetTaskForm();
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Create New Task</h3>
-                <button
-                  onClick={() => {
-                    setShowTaskModal(false);
-                    resetTaskForm();
-                  }}
-                  className="p-1 hover:bg-gray-100 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Task title"
-                  value={newTask.title}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, title: e.target.value })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-
-                <textarea
-                  placeholder="Description (optional)"
-                  value={newTask.description}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, description: e.target.value })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 h-20"
-                />
-
-                <input
-                  type="date"
-                  min={today}
-                  value={newTask.due_date}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, due_date: e.target.value })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <select
-                    value={newTask.priority}
-                    onChange={(e) =>
-                      setNewTask({ ...newTask, priority: e.target.value })
-                    }
-                    className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                  </select>
-
-                  <select
-                    value={newTask.status}
-                    onChange={(e) =>
-                      setNewTask({ ...newTask, status: e.target.value })
-                    }
-                    className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-
-                <div className="flex space-x-3 pt-4">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={createTask}
-                    disabled={!newTask.title.trim()}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium disabled:opacity-50"
-                  >
-                    Create Task
-                  </motion.button>
-                  <button
-                    onClick={() => {
-                      setShowTaskModal(false);
-                      resetTaskForm();
-                    }}
-                    className="px-6 py-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+          <CreateTaskModal
+            isOpen={showTaskModal}
+            setShowTaskModal={setShowTaskModal}
+            onCreate={validateAndCreateTask}
+            resetTaskForm={resetTaskForm}
+            newTask={newTask}
+            setNewTask={setNewTask}
+            errors={errors}
+            setErrors={setErrors}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+          />
         )}
       </AnimatePresence>
 
       {/* Edit Task Modal */}
       <AnimatePresence>
         {editingTask && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => setEditingTask(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Edit Task</h3>
-                <button
-                  onClick={() => setEditingTask(null)}
-                  className="p-1 hover:bg-gray-100 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={editingTask.title}
-                  onChange={(e) =>
-                    setEditingTask({ ...editingTask, title: e.target.value })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-
-                <textarea
-                  value={editingTask.description || ""}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 h-20"
-                />
-
-                <input
-                  type="date"
-                  min={today}
-                  value={
-                    editingTask.due_date
-                      ? new Date(editingTask.due_date)
-                          .toISOString()
-                          .split("T")[0]
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setEditingTask({ ...editingTask, due_date: e.target.value })
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <select
-                    value={editingTask.priority}
-                    onChange={(e) =>
-                      setEditingTask({
-                        ...editingTask,
-                        priority: e.target.value,
-                      })
-                    }
-                    className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                  </select>
-
-                  <select
-                    value={editingTask.status}
-                    onChange={(e) =>
-                      setEditingTask({ ...editingTask, status: e.target.value })
-                    }
-                    className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-
-                <div className="flex space-x-3 pt-4">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => updateTask(editingTask.id, editingTask)}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Save Changes</span>
-                  </motion.button>
-                  <button
-                    onClick={() => setEditingTask(null)}
-                    className="px-6 py-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+          <EditTaskModal
+            task={editingTask}
+            setTask={setEditingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={validateAndUpdateTask}
+            errors={errors}
+            setErrors={setErrors}
+          />
         )}
       </AnimatePresence>
       <AnimatePresence>
         {taskToDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => setTaskToDelete(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl p-6 w-full max-w-sm"
-            >
-              <h3 className="text-lg font-semibold mb-4 text-gray-800">
-                Confirm Delete
-              </h3>
-              <p className="text-sm text-gray-600 mb-6">
-                Are you sure you want to delete{" "}
-                <strong>{taskToDelete.title}</strong>? This action cannot be
-                undone.
-              </p>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setTaskToDelete(null)}
-                  className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={async () => {
-                    await deleteTask(taskToDelete.id);
-                    setTaskToDelete(null);
-                  }}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
-                >
-                  Yes, Delete
-                </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <DeleteConfirmationModal
+            task={taskToDelete}
+            onClose={() => setTaskToDelete(null)}
+            onConfirm={async () => {
+              await deleteTask(taskToDelete.id);
+              setTaskToDelete(null);
+            }}
+          />
         )}
       </AnimatePresence>
-
-      <style jsx="true">{`
-        .calendar-container .fc {
-          font-family: inherit;
-        }
-
-        .calendar-container .fc-toolbar-title {
-          font-size: 1.25rem !important;
-          font-weight: 600 !important;
-          color: #111827 !important;
-        }
-
-        .calendar-container .fc-button {
-          background: #f8fafc !important;
-          border: 1px solid #e2e8f0 !important;
-          color: #475569 !important;
-          border-radius: 0.5rem !important;
-          padding: 0.375rem 0.75rem !important;
-          font-weight: 500 !important;
-          transition: all 0.2s !important;
-        }
-
-        .calendar-container .fc-button:hover {
-          background: #e2e8f0 !important;
-          border-color: #cbd5e1 !important;
-          color: #334155 !important;
-        }
-
-        .calendar-container .fc-button-active {
-          background: #3b82f6 !important;
-          border-color: #2563eb !important;
-          color: white !important;
-        }
-
-        .calendar-container .fc-event {
-          border-radius: 0.25rem !important;
-          padding: 1px 3px !important;
-          margin: 1px 0 !important;
-          font-size: 0.75rem !important;
-        }
-
-        .calendar-container .fc-day-today {
-          background-color: #eff6ff !important;
-        }
-      `}</style>
     </motion.div>
   );
 };

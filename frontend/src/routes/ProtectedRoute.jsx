@@ -1,34 +1,59 @@
-import React, { useEffect } from 'react'
-import { useAuth } from '../context/AuthProvider'
-import { Navigate, useNavigate } from 'react-router-dom';
-import {jwtDecode} from 'jwt-decode'
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthProvider";
+import { Navigate, useNavigate } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
 
 const ProtectedRoute = ({ children }) => {
-    const { isAuthenticated, token, logout } = useAuth();
-    const navigate = useNavigate()
+  const { token, isAuthenticated, refreshAuthToken, logout } = useAuth();
+  const navigate = useNavigate();
 
-    useEffect(() =>{
-      if (token) {
-        try{
-          const decodedToken = jwtDecode(token)
-          const currentTime = Date.now() / 1000
+  useEffect(() => {
+    let intervalId;
 
-          if (decodedToken.exp < currentTime) {
-            logout()
-            navigate("/login")
+    const checkAndRefreshToken = async () => {
+      if (!token) {
+        logout();
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const decodedToken = jwtDecode(token);
+        const currentTime = Date.now() / 1000;
+        const bufferTime = 300;
+
+        if (decodedToken.exp < currentTime + bufferTime) {
+          try {
+            await refreshAuthToken();
+          } catch (error) {
+            console.error("Token refresh failed:", error);
+            logout();
+            navigate("/login");
           }
-        } catch (error) {
-          console.error("Invalid token:", error);
-          logout();
-          navigate('/login');
         }
+      } catch (error) {
+        console.error("Token validation failed:", error);
+        logout();
+        navigate("/login");
       } 
-    }, [logout, token ,navigate])
+    };
 
-    if (!isAuthenticated) {
-        return <Navigate to="/login" />
-    }
-  return children
-}
+    // Initial check
+    checkAndRefreshToken();
+
+    // Set up periodic check (every 1 minute)
+    intervalId = setInterval(checkAndRefreshToken, 60 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [token, refreshAuthToken, logout, navigate]);
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  return children;
+};
 
 export default ProtectedRoute;
