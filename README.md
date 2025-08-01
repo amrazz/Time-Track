@@ -1,4 +1,4 @@
-# 🚀 FastTrack Tasks – Learning FastAPI Through Practice
+# 🚀 Time Track – Learning FastAPI Through Practice
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
@@ -11,7 +11,7 @@
 
 ## 🎯 Project Overview
 
-**FastTrack Tasks** is a simple yet comprehensive task management application featuring:
+**Time Track** is a simple yet comprehensive task management application featuring:
 - ✨ User authentication with JWT tokens
 - 📝 Full CRUD operations for tasks
 - 🔍 Advanced filtering and search capabilities
@@ -52,7 +52,7 @@
 ## 📁 Project Structure
 
 ```
-FastTrack-Tasks/
+Time Track/
 │
 ├── backend/
 │   ├── app/
